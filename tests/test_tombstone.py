@@ -32,8 +32,8 @@ def test_tombstone():
     os.makedirs(dir_d)
 
     t1 = Tombstone(dir.name,1,1,0.1)
-    t1.scan(False)
-    assert os.path.basename(t1.monitor[0][0]) == 'a'
+    x = t1.update(False)
+    assert os.path.basename(t1.monitor[0]['name']) == 'a'
 
     time.sleep(3)
 
@@ -41,11 +41,11 @@ def test_tombstone():
     os.makedirs(dir_f)
 
     t2 = Tombstone(dir.name,1,2,2.9)
-    t2.scan(False)
+    x = t2.update(False)
 
     shutil.rmtree(dir.name)
 
-    assert os.path.basename(t2.monitor[0][0]) == 'b'
+    assert os.path.basename(t2.monitor[0]['name']) == 'b'
 
 if __name__ == "__main__":
     pytest.main()

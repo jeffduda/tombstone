@@ -115,12 +115,12 @@ class Tombstone:
 
         if self.filename is not None:   
             outlist = [x for x in outlist if not os.path.exists(os.path.join(x,self.filename))]
-        outlist = [ [x,os.path.getmtime(x)] for x in outlist ]
+        outlist = [ {'name':x, 'age': os.path.getmtime(x)} for x in outlist ]
 
         return(outlist)
 
 
-    def scan(self, make_tombstones=True):
+    def update(self, make_tombstones=True):
 
         # current timestamp for reference
         timestamp = datetime.datetime.now().timestamp()
@@ -134,30 +134,33 @@ class Tombstone:
 
         # Get age in seconds of each directory
         for d in range(len(self.monitor)):
-            self.monitor[d][1] = timestamp - self.monitor[d][1]
+            self.monitor[d]['age'] = timestamp - self.monitor[d]['age']
 
 
         # Get ages of subdirectoires within each monitored directory
         # Set age of monitoried dir to youngest subdir under it 
         for d in range(len(self.monitor)):
-            d_subs = self.get_dirs_list( [self.monitor[d][0]], self.depth, True)
+            d_subs = self.get_dirs_list( [self.monitor[d]['name']], self.depth, True)
             for s in range(len(d_subs)):
-                age = timestamp - d_subs[s][1]
-                if age < self.monitor[d][1]:
+                age = timestamp - d_subs[s]['age']
+                if age < self.monitor[d]['age']:
                     self.monitor[d][1] = age
 
         # Sort to oldest first
-        self.monitor.sort(key=lambda x: x[1])
+        self.monitor.sort(key=lambda x: x['age'])
 
         # get dirs considered "static"
-        self.static = [x for x in self.monitor if x[1] > self.threshold ]
+        self.static = [x for x in self.monitor if x['age'] > self.threshold ]
 
+        retlist = []
         if make_tombstones:
             for d in self.static:
-                tombname = os.path.join(d[0], self.filename)
+                tombname = os.path.join(d['name'], self.filename)
                 with open(tombname, 'w') as f:
-                    pass
-
+                    retlist.append(tombname)
+                    
+        return(retlist)
+    
 def main():
 
     parser = argparse.ArgumentParser(
@@ -169,32 +172,30 @@ def main():
     parser.add_argument("--threshold", '-t', type=float, help="How many seconds to be considered static", default=0)
     parser.add_argument("--filename", '-f', type=str, help="Filename for tombstone file", default=None)
     parser.add_argument("--info", '-i', action='store_true', help="List info but don't create tombstones")
+    parser.add_argument("--verbose", '-v', action='store_true', help="Verbose output")
     args = parser.parse_args()            
 
-    timestamp = datetime.datetime.now().timestamp()
-    t = Tombstone(directory=args.path)
-    t.level = args.level
-    t.depth = args.depth
-    t.threshold = args.threshold
+    t = Tombstone(args.path, args.level, args.depth, args.threshold)
     t.filename = args.filename
 
     make_tombstones = (args.filename is not None) and (not args.info)
 
-    t.scan(make_tombstones)
+    tlist = t.update(make_tombstones)
 
-    print("Directories to monitor")        
-    for d in t.monitor:
-        print("  " + d[0] + " " + str(d[1]))
+    if args.verbose:
 
-    if (args.filename is not None) and (not args.info):
-        print("Creating tombstones")
-        for d in t.static:
-            tomb = os.path.join(d[0], args.filename)
-            print("  "+tomb)
-    else:
+        print("Directories to monitor")        
+        for d in t.monitor:
+            print("  " + d['name'] + " " + str(d['age']))
+
         print("Static directories")
         for d in t.static:
-            print("  "+d[0] + " " + str(d[1]))
+            print("  "+d['name'] + " " + str(d['age']))
+
+        if len(tlist) > 0:
+            print("Created tombstones")
+            for f in tlist:
+                print("  "+f)
 
 if __name__ == "__main__":
     main()

@@ -26,6 +26,9 @@ class Tombstone:
         # Age (in seconds) used to trigger the creation of a tombstone
         self._threshold=threshold
 
+        # Check all files, not just directories
+        self._files=False
+
     @property
     def depth(self):
         return self._depth
@@ -51,6 +54,14 @@ class Tombstone:
     @filename.setter
     def filename(self, value: str):
         self._filename = value
+
+    @property
+    def files(self):
+        return self._files
+
+    @files.setter
+    def files(self, value: bool):
+        self._files = value
 
     @property
     def level(self):
@@ -85,6 +96,20 @@ class Tombstone:
         if value < 0:
             raise ValueError(f'Invalid threhsold: {value}')
         self._threshold = value        
+
+    # walk through a directory up to the specified depth of levels
+    def walk_to_depth(self, directory: str, depth: int):
+
+        directory = os.path.normpath(directory)
+        assert os.path.isdir(directory)
+
+        base_level = directory.count(os.path.sep)
+        for root, dirs, files in os.walk(directory):
+            current_level = root.count(os.path.sep)
+            yield root, dirs, files
+            if (current_level - base_level) >= depth:
+                del dirs[:]
+
 
     # Get the list of directories to monitor. These are subdirectories that
     #   are the specified number of levels below the base directory
@@ -136,17 +161,25 @@ class Tombstone:
         for d in range(len(self.monitor)):
             self.monitor[d]['age'] = timestamp - self.monitor[d]['age']
 
-
-        # Get ages of subdirectoires within each monitored directory
-        # Set age of monitoried dir to youngest subdir under it 
+        # Examine subdirectories and files for more recent mtimes
         for d in range(len(self.monitor)):
-            d_subs = self.get_dirs_list( [self.monitor[d]['name']], self.depth, True)
-            for s in range(len(d_subs)):
-                age = timestamp - d_subs[s]['age']
-                if age < self.monitor[d]['age']:
-                    self.monitor[d][1] = age
 
-        # Sort to oldest first
+            for root, dirs, files in self.walk_to_depth(self.monitor[d]['name'], self.depth):
+
+                # get age for all subdirectories
+                for subdir in dirs:
+                    age = timestamp - os.path.getmtime(os.path.join(root, subdir))
+                    if age < self.monitor[d]['age']:
+                        self.monitor[d]['age']=age
+
+                # optionally get age of all files
+                if self.files:
+                    for f in files:
+                        age = timestamp - os.path.getmtime(os.path.join(root, f))
+                        if age < self.monitor[d]['age']:
+                            self.monitor[d]['age']=age                        
+
+        # Sort with oldest first
         self.monitor.sort(key=lambda x: x['age'])
 
         # get dirs considered "static"
@@ -199,5 +232,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
